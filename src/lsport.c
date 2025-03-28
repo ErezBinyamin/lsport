@@ -4,6 +4,7 @@
 #include <string.h>
 #include <dirent.h>
 #include <unistd.h>
+#include <getopt.h>
 #include <ctype.h>
 #include <arpa/inet.h>
 #include <pwd.h>
@@ -17,6 +18,9 @@
 #define ANSI_RESET "\x1b[0m"
 #define DEBUG_PRINT(fmt, ...) \
     fprintf(stderr, ANSI_YELLOW "[DEBUG] %s:%d:%s(): " fmt ANSI_RESET "\n", __FILE__, __LINE__, __func__, ##__VA_ARGS__)
+
+int show_protocol = 0, show_destination = 0, show_state = 0;
+int show_user = 0, show_fds = 0;
 
 // Define a struct to store unique connection identifiers and their FD entries
 typedef struct {
@@ -34,11 +38,80 @@ void parse_proc_net(const char *protocol, const char *file, int *unknown_count);
 void get_process_info(int inode, char *proc_name, int *pid, char *user);
 void hex_to_ip(const char *hex, char *ip);
 int find_connection_index(const char *local_addr, int local_port, const char *remote_addr, int remote_port);
+void usage();
 
-int main() {
-    printf("%-20s %-10s %-10s %-10s %-20s %-10s %-15s %-20s %-20s\n", "Process Name", "PID", "Local Port", "Protocol", "Destination", "Dest Port", "State", "User", "FD Entries");
-    printf("---------------------------------------------------------------------------------------------------------------------------------------\n");
-     
+void usage() {
+    printf("Usage: lsport [options]\n");
+    printf("Options:\n");
+    printf("  -h, --help              Show this help message\n");
+    printf("  -v, --version           Show version information\n");
+    printf("  -a, --all               Display all columns\n");
+    printf("  -p, --protocol          Display protocol column\n");
+    printf("  -d, --destination       Display destination column\n");
+    printf("  -s, --state             Display state column\n");
+    printf("  -u, --user              Display user column\n");
+    printf("  -f, --file-descriptors  Display file descriptors column\n");
+}
+
+int main(int argc, char* argv[]) {
+    static struct option long_options[] = {
+        {"help", no_argument, 0, 'h'},
+        {"version", no_argument, 0, 'v'},
+        {"all", no_argument, 0, 'a'},
+        {"protocol", no_argument, 0, 'p'},
+        {"destination", no_argument, 0, 'd'},
+        {"state", no_argument, 0, 's'},
+        {"user", no_argument, 0, 'u'},
+        {"file-descriptors", no_argument, 0, 'f'},
+        {0, 0, 0, 0}
+    };
+
+    int opt;
+    while ((opt = getopt_long(argc, argv, "hvapdusf", long_options, NULL)) != -1) {
+        switch (opt) {
+            case 'h':
+                usage();
+                return 0;
+            case 'v':
+                printf("lsport version 1.0\n");
+                return 0;
+            case 'a':
+                show_protocol = 1;
+                show_destination = 1;
+                show_state = 1;
+                show_user = 1;
+                show_fds = 1;
+                break;
+            case 'p':
+                show_protocol = 1;
+                break;
+            case 'd':
+                show_destination = 1;
+                break;
+            case 's':
+                show_state = 1;
+                break;
+            case 'u':
+                show_user = 1;
+                break;
+            case 'f':
+                show_fds = 1;
+                break;
+            default:
+                usage();
+                return 1;
+        }
+    }
+
+    printf("%-8s %-20s %-12s", "PID", "CMD", "SRC PORT");
+    if (show_protocol) printf(" %-10s", "NODE");
+    if (show_destination) printf(" %-15s", "DST IP");
+    if (show_destination) printf(" %-10s", "DST PORT");
+    if (show_state) printf(" %-15s", "STATE");
+    if (show_user) printf(" %-19s", "USER");
+    if (show_fds) printf(" %-10s", "FDs");
+    printf("\n");
+
     DIR *dir = opendir("/proc/net");
     if (!dir) {
         perror("opendir");
@@ -133,13 +206,21 @@ void parse_proc_net(const char *protocol, const char *file, int *unknown_count) 
             default: state_str = "UNKNOWN";
         }
         
-        printf("%-20s %-10d %-10d %-10s %-20s %-10d %-15s %-20s", proc_name, pid, local_port, protocol, remote_ip, remote_port, state_str, user);
-        printf("[");
-        for (int i = 0; i < seen_connections[conn_index].fd_count; i++) {
-            if (i > 0) printf(", ");
-            printf("%d", seen_connections[conn_index].fd_entries[i]);
+        printf("%-8d %-20s %-12d", pid, proc_name, local_port);
+        if (show_protocol) printf(" %-10s", protocol);
+        if (show_destination) printf(" %-15s", remote_ip);
+        if (show_destination) printf(" %-10d", remote_port);
+        if (show_state) printf(" %-15s", state_str);
+        if (show_user) printf(" %-20s", user);
+        if (show_fds) {
+            printf("[");
+            for (int i = 0; i < seen_connections[conn_index].fd_count; i++) {
+                if (i > 0) printf(", ");
+                printf("%d", seen_connections[conn_index].fd_entries[i]);
+            }
+            printf("]\n");
         }
-        printf("]\n");
+        else{ printf("\n"); }
     }
     fclose(fp);
 }
