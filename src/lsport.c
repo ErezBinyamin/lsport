@@ -49,6 +49,10 @@ int main() {
     int unknown_count = 0;
     while ((entry = readdir(dir))) {
         if (0 == strcmp(entry->d_name, "unix")) continue;
+        if (0 == strcmp(entry->d_name, "igmp")) continue;
+        if (0 == strcmp(entry->d_name, "igmp6")) continue;
+        if (0 == strcmp(entry->d_name, "dev")) continue;
+        if (0 == strcmp(entry->d_name, "wireless")) continue;
         if (entry->d_type == DT_REG) {
             char filepath[MAX_PATH];
             snprintf(filepath, sizeof(filepath), "/proc/net/%s", entry->d_name);
@@ -58,7 +62,7 @@ int main() {
     }
     
     closedir(dir);
-    printf("Unknown connections: %d\n", unknown_count);
+    //printf("Unknown connections: %d\n", unknown_count);
     return 0;
 }
 
@@ -109,8 +113,8 @@ void parse_proc_net(const char *protocol, const char *file, int *unknown_count) 
             continue;
         }
         if (0==(inode + pid)) {
-            strcpy(proc_name, "Kproc");
-            strcpy(user, "Kernel");
+            strcpy(proc_name, "KernProc?");
+            strcpy(user, "Kernel?");
         }
 
         char *state_str;
