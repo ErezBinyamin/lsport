@@ -13,6 +13,11 @@
 #define MAX_CONNS 1024
 #define MAX_FDS 128
 
+#define ANSI_YELLOW "\x1b[33m"
+#define ANSI_RESET "\x1b[0m"
+#define DEBUG_PRINT(fmt, ...) \
+    fprintf(stderr, ANSI_YELLOW "[DEBUG] %s:%d:%s(): " fmt ANSI_RESET "\n", __FILE__, __LINE__, __func__, ##__VA_ARGS__)
+
 // Define a struct to store unique connection identifiers and their FD entries
 typedef struct {
     char local_addr[128];
@@ -97,11 +102,14 @@ void parse_proc_net(const char *protocol, const char *file, int *unknown_count) 
         int pid = 0;
         char user[256] = "Unknown";
         get_process_info(inode, proc_name, &pid, user);
-        if (0 == ( pid + local_port + remote_port )) {
+        if (0 == ( pid + local_port + remote_port + strlen(remote_addr))) {
             (*unknown_count)++;
             continue;
         }
-        if (0==inode) strcpy(user, "Kernel");
+        if (0==(inode + pid)) {
+            strcpy(proc_name, "Kproc");
+            strcpy(user, "Kernel");
+        }
 
         char *state_str;
         switch (state) {
