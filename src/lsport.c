@@ -6,12 +6,13 @@
 #include <unistd.h>
 #include <ctype.h>
 #include <arpa/inet.h>
+#include <pwd.h>
 
 #define MAX_PATH 256
 #define MAX_LINE 1024
 
 void parse_proc_net(const char *protocol, const char *file, int *unknown_count);
-void get_process_info(int inode, char *proc_name, int *pid);
+void get_process_info(int inode, char *proc_name, int *pid, char *user);
 void hex_to_ip(const char *hex, char *ip);
 
 int main() {
@@ -60,9 +61,9 @@ void parse_proc_net(const char *protocol, const char *file, int *unknown_count) 
         
         char proc_name[256] = "Unknown";
         int pid = 0;
-        get_process_info(inode, proc_name, &pid);
-        //if (0 == (pid + local_port + remote_port + remote_ip)) {
-        if (0 == (pid + local_port + remote_port )) {
+        char user[256] = "Unknown";
+        get_process_info(inode, proc_name, &pid, user);
+        if (0 == ( pid + local_port + remote_port )) {
             (*unknown_count)++;
             continue;
         }
@@ -84,14 +85,14 @@ void parse_proc_net(const char *protocol, const char *file, int *unknown_count) 
         }
         
         //printf("%-20s %-10d %-10d %-10s %-20s %-10d\n", proc_name, pid, local_port, protocol, remote_ip, remote_port);
-        printf("%-20s %-10d %-10d %-10s %-20s %-10d %-15s\n", proc_name, pid, local_port, protocol, remote_ip, remote_port, state_str);
-        //printf("%-20s %-10d %-10d %-10s %-20s %-10d %-15s %-10s\n", proc_name, pid, local_port, protocol, remote_ip, remote_port, state_str, user);
+        //printf("%-20s %-10d %-10d %-10s %-20s %-10d %-15s\n", proc_name, pid, local_port, protocol, remote_ip, remote_port, state_str);
+        printf("%-20s %-10d %-10d %-10s %-20s %-10d %-15s %-10s\n", proc_name, pid, local_port, protocol, remote_ip, remote_port, state_str, user);
     }
     
     fclose(fp);
 }
 
-void get_process_info(int inode, char *proc_name, int *pid) {
+void get_process_info(int inode, char *proc_name, int *pid, char* user) {
     struct dirent *entry;
     DIR *dp = opendir("/proc");
     if (!dp) return;
@@ -129,6 +130,26 @@ void get_process_info(int inode, char *proc_name, int *pid) {
                         } else {
                             strcpy(proc_name, "Unknown");
                         }
+
+                        char status_path[MAX_PATH];
+                        snprintf(status_path, sizeof(status_path), "/proc/%d/status", *pid);
+                        FILE *status_fp = fopen(status_path, "r");
+                        if (status_fp) {
+                            char buf[MAX_LINE];
+                            while (fgets(buf, sizeof(buf), status_fp)) {
+                                if (strncmp(buf, "Uid:", 4) == 0) {
+                                    int proc_uid;
+                                    sscanf(buf, "Uid:\t%d", &proc_uid);
+                                    struct passwd *pw = getpwuid(proc_uid);
+                                    if (pw) {
+                                        strcpy(user, pw->pw_name);
+                                    }
+                                    break;
+                                }
+                            }
+                            fclose(status_fp);
+                        }
+
                         closedir(fd_dir);
                         closedir(dp);
                         return;
