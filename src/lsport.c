@@ -10,15 +10,30 @@
 
 #define MAX_PATH 256
 #define MAX_LINE 1024
+#define MAX_CONNS 1024
+#define MAX_FDS 128
+
+// Define a struct to store unique connection identifiers and their FD entries
+typedef struct {
+    char local_addr[128];
+    int local_port;
+    char remote_addr[128];
+    int remote_port;
+    int fd_entries[MAX_FDS];
+    int fd_count;
+} Connection;
+Connection seen_connections[MAX_CONNS];
+int conn_count = 0;
 
 void parse_proc_net(const char *protocol, const char *file, int *unknown_count);
 void get_process_info(int inode, char *proc_name, int *pid, char *user);
 void hex_to_ip(const char *hex, char *ip);
+int find_connection_index(const char *local_addr, int local_port, const char *remote_addr, int remote_port);
 
 int main() {
-    printf("%-20s %-10s %-10s %-10s %-20s %-10s %-15s %-10s\n", "Process Name", "PID", "Local Port", "Protocol", "Destination", "Dest Port", "State", "User");
-    printf("----------------------------------------------------------------------------------------------------------\n");
-    
+    printf("%-20s %-10s %-10s %-10s %-20s %-10s %-15s %-10s %-20s\n", "Process Name", "PID", "Local Port", "Protocol", "Destination", "Dest Port", "State", "User", "FD Entries");
+    printf("----------------------------------------------------------------------------------------------------------------------\n");
+     
     DIR *dir = opendir("/proc/net");
     if (!dir) {
         perror("opendir");
@@ -47,8 +62,8 @@ void parse_proc_net(const char *protocol, const char *file, int *unknown_count) 
         return;
     }
     
-    char line[MAX_LINE];
     // Skip the first line (header)
+    char line[MAX_LINE];
     if (fgets(line, sizeof(line), fp) == NULL) {
         fclose(fp);
         return;
@@ -62,6 +77,21 @@ void parse_proc_net(const char *protocol, const char *file, int *unknown_count) 
                local_addr, &local_port, remote_addr, &remote_port, &state, &uid, &inode);
        
         hex_to_ip(remote_addr, remote_ip);
+
+        // Check if this connection already exists
+        int conn_index = find_connection_index(local_addr, local_port, remote_ip, remote_port);
+        if (conn_index == -1) {
+            // New connection, create and add it to the seen_connections array
+            Connection new_conn = {0};
+            strncpy(new_conn.local_addr, local_addr, sizeof(new_conn.local_addr));
+            new_conn.local_port = local_port;
+            strncpy(new_conn.remote_addr, remote_ip, sizeof(new_conn.remote_addr));
+            new_conn.remote_port = remote_port;
+            seen_connections[conn_count++] = new_conn;
+            conn_index = conn_count - 1;
+        }
+        // Add the current FD entry to the connection's FD list
+        seen_connections[conn_index].fd_entries[seen_connections[conn_index].fd_count++] = inode;
         
         char proc_name[256] = "Unknown";
         int pid = 0;
@@ -71,6 +101,7 @@ void parse_proc_net(const char *protocol, const char *file, int *unknown_count) 
             (*unknown_count)++;
             continue;
         }
+        if (0==inode) strcpy(user, "Kernel");
 
         char *state_str;
         switch (state) {
@@ -88,10 +119,28 @@ void parse_proc_net(const char *protocol, const char *file, int *unknown_count) 
             default: state_str = "UNKNOWN";
         }
         
-        printf("%-20s %-10d %-10d %-10s %-20s %-10d %-15s %-10s\n", proc_name, pid, local_port, protocol, remote_ip, remote_port, state_str, user);
+        printf("%-20s %-10d %-10d %-10s %-20s %-10d %-15s %-10s", proc_name, pid, local_port, protocol, remote_ip, remote_port, state_str, user);
+        printf("[");
+        for (int i = 0; i < seen_connections[conn_index].fd_count; i++) {
+            if (i > 0) printf(", ");
+            printf("%d", seen_connections[conn_index].fd_entries[i]);
+        }
+        printf("]\n");
     }
-    
     fclose(fp);
+}
+
+// Function to find the index of an existing connection in the seen_connections array
+int find_connection_index(const char *local_addr, int local_port, const char *remote_addr, int remote_port) {
+    for (int i = 0; i < conn_count; i++) {
+        if (strcmp(seen_connections[i].local_addr, local_addr) == 0 &&
+            seen_connections[i].local_port == local_port &&
+            strcmp(seen_connections[i].remote_addr, remote_addr) == 0 &&
+            seen_connections[i].remote_port == remote_port) {
+            return i;  // Found the connection
+        }
+    }
+    return -1;  // Connection not found
 }
 
 void get_process_info(int inode, char *proc_name, int *pid, char* user) {
