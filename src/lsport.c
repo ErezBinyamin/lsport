@@ -36,8 +36,8 @@ void hex_to_ip(const char *hex, char *ip);
 int find_connection_index(const char *local_addr, int local_port, const char *remote_addr, int remote_port);
 
 int main() {
-    printf("%-20s %-10s %-10s %-10s %-20s %-10s %-15s %-10s %-20s\n", "Process Name", "PID", "Local Port", "Protocol", "Destination", "Dest Port", "State", "User", "FD Entries");
-    printf("----------------------------------------------------------------------------------------------------------------------\n");
+    printf("%-20s %-10s %-10s %-10s %-20s %-10s %-15s %-20s %-20s\n", "Process Name", "PID", "Local Port", "Protocol", "Destination", "Dest Port", "State", "User", "FD Entries");
+    printf("---------------------------------------------------------------------------------------------------------------------------------------\n");
      
     DIR *dir = opendir("/proc/net");
     if (!dir) {
@@ -48,9 +48,11 @@ int main() {
     struct dirent *entry;
     int unknown_count = 0;
     while ((entry = readdir(dir))) {
+        if (0 == strcmp(entry->d_name, "unix")) continue;
         if (entry->d_type == DT_REG) {
             char filepath[MAX_PATH];
             snprintf(filepath, sizeof(filepath), "/proc/net/%s", entry->d_name);
+            //DEBUG_PRINT("Parsing: %s", entry->d_name);
             parse_proc_net(entry->d_name, filepath, &unknown_count);
         }
     }
@@ -127,7 +129,7 @@ void parse_proc_net(const char *protocol, const char *file, int *unknown_count) 
             default: state_str = "UNKNOWN";
         }
         
-        printf("%-20s %-10d %-10d %-10s %-20s %-10d %-15s %-10s", proc_name, pid, local_port, protocol, remote_ip, remote_port, state_str, user);
+        printf("%-20s %-10d %-10d %-10s %-20s %-10d %-15s %-20s", proc_name, pid, local_port, protocol, remote_ip, remote_port, state_str, user);
         printf("[");
         for (int i = 0; i < seen_connections[conn_index].fd_count; i++) {
             if (i > 0) printf(", ");
