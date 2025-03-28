@@ -26,7 +26,7 @@ int main() {
     }
     
     struct dirent *entry;
-    int unknown_count = 0, local_count = 0;
+    int unknown_count = 0;
     while ((entry = readdir(dir))) {
         if (entry->d_type == DT_REG) {
             char filepath[MAX_PATH];
@@ -48,7 +48,11 @@ void parse_proc_net(const char *protocol, const char *file, int *unknown_count) 
     }
     
     char line[MAX_LINE];
-    fgets(line, sizeof(line), fp); // Skip the first line (header)
+    // Skip the first line (header)
+    if (fgets(line, sizeof(line), fp) == NULL) {
+        fclose(fp);
+        return;
+    }
     
     while (fgets(line, sizeof(line), fp)) {
         int local_port=0, remote_port=0, state=0, uid=0, inode=0;
@@ -84,8 +88,6 @@ void parse_proc_net(const char *protocol, const char *file, int *unknown_count) 
             default: state_str = "UNKNOWN";
         }
         
-        //printf("%-20s %-10d %-10d %-10s %-20s %-10d\n", proc_name, pid, local_port, protocol, remote_ip, remote_port);
-        //printf("%-20s %-10d %-10d %-10s %-20s %-10d %-15s\n", proc_name, pid, local_port, protocol, remote_ip, remote_port, state_str);
         printf("%-20s %-10d %-10d %-10s %-20s %-10d %-15s %-10s\n", proc_name, pid, local_port, protocol, remote_ip, remote_port, state_str, user);
     }
     
@@ -101,7 +103,8 @@ void get_process_info(int inode, char *proc_name, int *pid, char* user) {
         if (!isdigit(entry->d_name[0])) continue;
         
         char fd_path[MAX_PATH];
-        snprintf(fd_path, sizeof(fd_path), "/proc/%s/fd", entry->d_name);
+        int max_len = sizeof(fd_path) - strlen("/proc/") - strlen("/fd") - 1;
+        snprintf(fd_path, sizeof(fd_path), "/proc/%.*s/fd", max_len, entry->d_name);
         
         DIR *fd_dir = opendir(fd_path);
         if (!fd_dir) continue;
@@ -111,6 +114,7 @@ void get_process_info(int inode, char *proc_name, int *pid, char* user) {
             if (fd_entry->d_type != DT_LNK) continue;
             
             char link_path[MAX_PATH], target[MAX_PATH];
+
             snprintf(link_path, sizeof(link_path), "%s/%s", fd_path, fd_entry->d_name);
             ssize_t len = readlink(link_path, target, sizeof(target) - 1);
             
@@ -124,7 +128,10 @@ void get_process_info(int inode, char *proc_name, int *pid, char* user) {
                         snprintf(proc_name, 256, "/proc/%d/comm", *pid);
                         FILE *comm_fp = fopen(proc_name, "r");
                         if (comm_fp) {
-                            fgets(proc_name, 256, comm_fp);
+                            if (fgets(proc_name, 256, comm_fp) == NULL) {
+                                fclose(comm_fp);
+                                return;
+                            }
                             proc_name[strcspn(proc_name, "\n")] = 0;
                             fclose(comm_fp);
                         } else {
