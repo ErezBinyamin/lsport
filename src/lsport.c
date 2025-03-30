@@ -111,10 +111,10 @@ int main(int argc, char* argv[]) {
         char *column;
         column = strtok(output_columns, ",");
         while (column != NULL) {
-            //else if (strcmp(column, "PID") == 0) { show_pid = 1; }
-            //else if (strcmp(column, "CMD") == 0) { show_cmd = 1; }
-            //else if (strcmp(column, "LPORT") == 0) { show_lport = 1; }
-            if (strcmp(column, "NODE") == 0) { show_protocol = 1; }
+            if (strcmp(column, "PID") == 0) { /* show_pid = 1;*/ opt=0;}
+            else if (strcmp(column, "CMD") == 0) { /* show_cmd = 1;*/ opt=0;}
+            else if (strcmp(column, "LPORT") == 0) { /* show_lport = 1;*/ opt=0;}
+            else if (strcmp(column, "NODE") == 0) { show_protocol = 1; }
             else if (strcmp(column, "DST") == 0) { show_destination = 1; }
             else if (strcmp(column, "STATE") == 0) { show_state = 1; }
             else if (strcmp(column, "USER") == 0) { show_user = 1; }
@@ -204,7 +204,7 @@ void parse_proc_net(const char *protocol, const char *file) {
         // Add the current FD entry to the connection's FD list
         seen_connections[conn_index].fd_entries[seen_connections[conn_index].fd_count++] = inode;
         
-        char proc_name[256] = "Unknown";
+        char proc_name[256] = "?";
         int pid = 0;
         char user[256] = "UID: ";
         snprintf(user, sizeof(user), "UID: %d", uid);
@@ -242,7 +242,12 @@ void parse_proc_net(const char *protocol, const char *file) {
             default: state_str = "UNKNOWN";
         }
         
-        printf("%-8d %-20s %-12d", pid, proc_name, local_port);
+        if((0!=current_uid) && 0==pid && (strcmp(proc_name, "?") == 0) ){
+            printf("%-8s %-20s %-12d", "?", proc_name, local_port);
+        }
+        else {
+            printf("%-8d %-20s %-12d", pid, proc_name, local_port);
+        }
         if (show_protocol) printf(" %-10s", protocol);
         if (show_destination) printf(" %-15s", remote_ip);
         if (show_destination) printf(" %-10d", remote_port);
