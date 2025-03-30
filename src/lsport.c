@@ -20,8 +20,9 @@
 #define DEBUG_PRINT(fmt, ...) \
     fprintf(stderr, ANSI_YELLOW "[DEBUG] %s:%d:%s(): " fmt ANSI_RESET "\n", __FILE__, __LINE__, __func__, ##__VA_ARGS__)
 
-int show_protocol = 0, show_destination = 0, show_state = 0;
-int show_user = 0, show_fds = 0;
+int show_protocol = 0, show_destination = 0, show_state = 0, show_user = 0, show_fds = 0;
+int show_all_ports = 0;
+char *output_columns = NULL;
 
 // Define a struct to store unique connection identifiers and their FD entries
 typedef struct {
@@ -43,33 +44,43 @@ int find_connection_index(const char *local_addr, int local_port, const char *re
 void usage();
 
 void usage() {
-    printf("Usage: lsport [options]\n");
-    printf("Options:\n");
-    printf("  -h, --help              Show this help message\n");
-    printf("  -v, --version           Show version information\n");
-    printf("  -a, --all               Display all columns\n");
-    printf("  -p, --protocol          Display protocol column\n");
-    printf("  -d, --destination       Display destination column\n");
-    printf("  -s, --state             Display state column\n");
-    printf("  -u, --user              Display user column\n");
-    printf("  -f, --file-descriptors  Display file descriptors column\n");
-}
+    printf("Usage: \n"
+           " lsport [options]\n"
+           "\n"
+           "List information about open network ports\n"
+           "\n"
+           "Options:\n"
+           "  -h, --help              this help message\n"
+           "  -v, --version           version information\n"
+           "  -A, -e                  all ports (default is only users ports)\n"
+           "  -O, --output-all        output all columns\n"
+           "  -o, --output <list>     specified output columns\n"
+           "\n"
+           "Available output columns:\n"
+           "          PID  Process Identifier(ID)\n"
+           "          CMD  Process name\n"
+           "        LPORT  Port on local machine\n"
+           "         NODE  Traffic type ie: tcp or udp\n"
+           "          DST  Destination IP address and remote port (DSTIP and RPORT)\n"
+           "        STATE  Connection state/status\n"
+           "         USER  Username of user who owns the process\n"
+           "          FDs  List of file descriptors pointing to this open port\n"
+           "\n"
+           );
+}  
 
 int main(int argc, char* argv[]) {
     static struct option long_options[] = {
-        {"help", no_argument, 0, 'h'},
-        {"version", no_argument, 0, 'v'},
-        {"all", no_argument, 0, 'a'},
-        {"protocol", no_argument, 0, 'p'},
-        {"destination", no_argument, 0, 'd'},
-        {"state", no_argument, 0, 's'},
-        {"user", no_argument, 0, 'u'},
-        {"file-descriptors", no_argument, 0, 'f'},
+        {"help",       no_argument,       NULL, 'h'},
+        {"version",    no_argument,       NULL, 'v'},
+        {"A",          no_argument,       NULL, 'A'},
+        {"e",          no_argument,       NULL, 'e'},
+        {"output-all", no_argument,       NULL, 'O'},
+        {"output",     required_argument, NULL, 'o'},
         {0, 0, 0, 0}
     };
-
     int opt;
-    while ((opt = getopt_long(argc, argv, "hvapdusf", long_options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "hvAeOo:", long_options, NULL)) != -1) {
         switch (opt) {
             case 'h':
                 usage();
@@ -77,38 +88,50 @@ int main(int argc, char* argv[]) {
             case 'v':
                 printf("lsport version 1.0\n");
                 return 0;
-            case 'a':
+            case 'A':
+            case 'e':
+                show_all_ports = 1;
+                break;
+            case 'O':
                 show_protocol = 1;
                 show_destination = 1;
                 show_state = 1;
                 show_user = 1;
                 show_fds = 1;
                 break;
-            case 'p':
-                show_protocol = 1;
-                break;
-            case 'd':
-                show_destination = 1;
-                break;
-            case 's':
-                show_state = 1;
-                break;
-            case 'u':
-                show_user = 1;
-                break;
-            case 'f':
-                show_fds = 1;
+            case 'o':
+                output_columns = optarg;
                 break;
             default:
                 usage();
                 return 1;
         }
     }
+    if (NULL != output_columns){
+        char *column;
+        column = strtok(output_columns, ",");
+        while (column != NULL) {
+            //else if (strcmp(column, "PID") == 0) { show_pid = 1; }
+            //else if (strcmp(column, "CMD") == 0) { show_cmd = 1; }
+            //else if (strcmp(column, "LPORT") == 0) { show_lport = 1; }
+            if (strcmp(column, "NODE") == 0) { show_protocol = 1; }
+            else if (strcmp(column, "DST") == 0) { show_destination = 1; }
+            else if (strcmp(column, "STATE") == 0) { show_state = 1; }
+            else if (strcmp(column, "USER") == 0) { show_user = 1; }
+            else if (strcmp(column, "FDs") == 0) { show_fds = 1; }
+            else{
+                fprintf(stderr, "Error: Invalid output column: %s\n\n", column);
+                usage();
+                return 1;
+            }
+            column = strtok(NULL, ",");
+        }
+    }
 
-    printf("%-8s %-20s %-12s", "PID", "CMD", "SRC PORT");
+    printf("%-8s %-20s %-12s", "PID", "CMD", "LPORT");
     if (show_protocol) printf(" %-10s", "NODE");
-    if (show_destination) printf(" %-15s", "DST IP");
-    if (show_destination) printf(" %-10s", "DST PORT");
+    if (show_destination) printf(" %-15s", "DSTIP");
+    if (show_destination) printf(" %-10s", "RPORT");
     if (show_state) printf(" %-15s", "STATE");
     if (show_user) printf(" %-19s", "USER");
     if (show_fds) printf(" %-10s", "FDs");
@@ -200,6 +223,8 @@ void parse_proc_net(const char *protocol, const char *file) {
             }
         }
         if (0==uid) strcpy(user, "root");
+        uid_t current_uid = geteuid();
+        if (0==show_all_ports && current_uid != uid) continue;
 
         char *state_str;
         switch (state) {
