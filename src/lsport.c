@@ -236,19 +236,6 @@ void parse_proc_net(const char *protocol, const char *file) {
     fclose(fp);
 }
 
-// Function to find the index of an existing connection in the seen_connections array
-int find_connection_index(const char *local_addr, int local_port, const char *remote_addr, int remote_port) {
-    for (int i = 0; i < conn_count; i++) {
-        if (strcmp(seen_connections[i].local_addr, local_addr) == 0 &&
-            seen_connections[i].local_port == local_port &&
-            strcmp(seen_connections[i].remote_addr, remote_addr) == 0 &&
-            seen_connections[i].remote_port == remote_port) {
-            return i;  // Found the connection
-        }
-    }
-    return -1;  // Connection not found
-}
-
 void get_process_info(int inode, char *proc_name, int *pid, char* user) {
     struct dirent *entry;
     DIR *dp = opendir("/proc");
@@ -322,6 +309,19 @@ void get_process_info(int inode, char *proc_name, int *pid, char* user) {
         closedir(fd_dir);
     }
     closedir(dp);
+}
+
+// Function to find the index of an existing connection in the seen_connections array
+int find_connection_index(const char *local_addr, int local_port, const char *remote_addr, int remote_port) {
+    for (int i = 0; i < conn_count; i++) {
+        if (strcmp(seen_connections[i].local_addr, local_addr) == 0 &&
+            seen_connections[i].local_port == local_port &&
+            strcmp(seen_connections[i].remote_addr, remote_addr) == 0 &&
+            seen_connections[i].remote_port == remote_port) {
+            return i;  // Found the connection
+        }
+    }
+    return -1;  // Connection not found
 }
 
 void hex_to_ip(const char *hex, char *ip) {
