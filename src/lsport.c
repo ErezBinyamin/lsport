@@ -183,7 +183,8 @@ void parse_proc_net(const char *protocol, const char *file) {
         
         char proc_name[256] = "Unknown";
         int pid = 0;
-        char user[256] = "Other";
+        char user[256] = "UID: ";
+        snprintf(user, sizeof(user), "UID: %d", uid);
         get_process_info(inode, proc_name, &pid, user);
         if (0 == ( pid + local_port + remote_port + strlen(remote_addr))) {
             DEBUG_PRINT("Probably a problem");
@@ -191,14 +192,14 @@ void parse_proc_net(const char *protocol, const char *file) {
         }
         if (0==inode) {
             if (0==pid) {
-                strcpy(proc_name, "KernelProc?");
-                strcpy(user, "Kernel?");
+                strcpy(proc_name, "Kernel Swapper/Idle");
             }
             else {
                 strcpy(proc_name, "?Anomally?");
                 strcpy(user, "?Anomally?");
             }
         }
+        if (0==uid) strcpy(user, "root");
 
         char *state_str;
         switch (state) {
