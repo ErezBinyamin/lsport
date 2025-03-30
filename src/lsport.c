@@ -4,6 +4,7 @@
 #include <string.h>
 #include <dirent.h>
 #include <unistd.h>
+#include <errno.h>
 #include <getopt.h>
 #include <ctype.h>
 #include <arpa/inet.h>
@@ -34,9 +35,10 @@ typedef struct {
 Connection seen_connections[MAX_CONNS];
 int conn_count = 0;
 
-void parse_proc_net(const char *protocol, const char *file, int *unknown_count);
+void parse_proc_net(const char *protocol, const char *file);
 void get_process_info(int inode, char *proc_name, int *pid, char *user);
 void hex_to_ip(const char *hex, char *ip);
+int cmp_str(const void *a, const void *b);
 int find_connection_index(const char *local_addr, int local_port, const char *remote_addr, int remote_port);
 void usage();
 
@@ -119,27 +121,29 @@ int main(int argc, char* argv[]) {
     }
     
     struct dirent *entry;
-    int unknown_count = 0;
+    // Only analyze certain files in /proc/net/... (All these files have the same table header)
+    const char *good_files[] = {
+        "icmp", "icmp6", "raw", "raw6", "tcp", "tcp6", "udp", "udp6", "udplite", "udplite6"
+    };
+    const size_t good_count = sizeof(good_files) / sizeof(good_files[0]);
     while ((entry = readdir(dir))) {
-        if (0 == strcmp(entry->d_name, "unix")) continue;
-        if (0 == strcmp(entry->d_name, "igmp")) continue;
-        if (0 == strcmp(entry->d_name, "igmp6")) continue;
-        if (0 == strcmp(entry->d_name, "dev")) continue;
-        if (0 == strcmp(entry->d_name, "wireless")) continue;
+        if (! bsearch(entry->d_name, good_files, good_count, sizeof(char *), cmp_str)) continue;
         if (entry->d_type == DT_REG) {
             char filepath[MAX_PATH];
             snprintf(filepath, sizeof(filepath), "/proc/net/%s", entry->d_name);
-            //DEBUG_PRINT("Parsing: %s", entry->d_name);
-            parse_proc_net(entry->d_name, filepath, &unknown_count);
+            if (access(filepath, R_OK) != 0) {
+                fprintf(stderr, "Permission denied: %s (errno: %d)\n", filepath, errno);
+                continue;
+            }
+            parse_proc_net(entry->d_name, filepath);
         }
     }
     
     closedir(dir);
-    //printf("Unknown connections: %d\n", unknown_count);
     return 0;
 }
 
-void parse_proc_net(const char *protocol, const char *file, int *unknown_count) {
+void parse_proc_net(const char *protocol, const char *file) {
     FILE *fp = fopen(file, "r");
     if (!fp) {
         perror("fopen");
@@ -179,15 +183,21 @@ void parse_proc_net(const char *protocol, const char *file, int *unknown_count) 
         
         char proc_name[256] = "Unknown";
         int pid = 0;
-        char user[256] = "Unknown";
+        char user[256] = "Other";
         get_process_info(inode, proc_name, &pid, user);
         if (0 == ( pid + local_port + remote_port + strlen(remote_addr))) {
-            (*unknown_count)++;
+            DEBUG_PRINT("Probably a problem");
             continue;
         }
-        if (0==(inode + pid)) {
-            strcpy(proc_name, "KernProc?");
-            strcpy(user, "Kernel?");
+        if (0==inode) {
+            if (0==pid) {
+                strcpy(proc_name, "KernelProc?");
+                strcpy(user, "Kernel?");
+            }
+            else {
+                strcpy(proc_name, "?Anomally?");
+                strcpy(user, "?Anomally?");
+            }
         }
 
         char *state_str;
@@ -317,4 +327,8 @@ void hex_to_ip(const char *hex, char *ip) {
     unsigned int bytes[4];
     sscanf(hex, "%2X%2X%2X%2X", &bytes[3], &bytes[2], &bytes[1], &bytes[0]);
     snprintf(ip, INET_ADDRSTRLEN, "%d.%d.%d.%d", bytes[0], bytes[1], bytes[2], bytes[3]);
+}
+
+int cmp_str(const void *a, const void *b) {
+    return strcmp((const char *)a, *(const char **)b);
 }
