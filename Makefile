@@ -21,6 +21,8 @@ netmon: netmon.c netmon.skel.h
 	$(CC) -g -O2 -o $@ netmon.c $(LIBBPF_OBJ) -lelf -lz
 
 test: netmon
+	sudo ./netmon
+systest: netmon
 	sudo strace ./netmon
 
 clean:

@@ -15,29 +15,6 @@ void handle_signal(int sig) {
     exiting = 1;
 }
 
-// Update the `handle_event` function to properly use `struct net_event`:
-//static void handle_event(void *ctx, void *data, size_t len) {
-//    struct net_event *e = data;
-//
-//    if (e->family == AF_INET) {  // This is now valid because net_event is defined
-//        char saddr[INET_ADDRSTRLEN], daddr[INET_ADDRSTRLEN];
-//        inet_ntop(AF_INET, &e->saddr_v4, saddr, sizeof(saddr));
-//        inet_ntop(AF_INET, &e->daddr_v4, daddr, sizeof(daddr));
-//
-//        const char *event_type = (e->type == 0) ? "conn" : "close";
-//        printf("%-6s %-5d %-16s %s:%d -> %s:%d\n",
-//               event_type,
-//               e->pid,
-//               e->comm,
-//               saddr,
-//               ntohs(e->sport),
-//               daddr,
-//               ntohs(e->dport));
-//    }
-//}
-
-
-
 static void handle_event(void *ctx, void *data, size_t len) {
     struct net_event *e = data;
 
@@ -54,8 +31,9 @@ static void handle_event(void *ctx, void *data, size_t len) {
         snprintf(daddr, sizeof(daddr), "?");
     }
 
+    const char *event_type = (e->type == 0) ? "conn" : "close";
     printf("%-6s %-5d %-16s %s:%d -> %s:%d\n",
-           e->type,
+           event_type,
            e->pid,
            e->comm,
            saddr,
