@@ -1,36 +1,28 @@
-# Compiler and flags
-CC = gcc
-CFLAGS = -Wall -Wextra -O2
+BPF_CLANG ?= clang
+BPF_LLVM_STRIP ?= llvm-strip
+ARCH ?= $(shell uname -m | sed 's/x86_64/x86/;s/aarch64/arm64/')
+BPF_HEADERS ?= /usr/include
+BPF_CFLAGS = -g -O2 -target bpf -D__TARGET_ARCH_$(ARCH) -I$(BPF_HEADERS)
+LIBBPF_DIR = /usr/include/bpf
+LIBBPF_OBJ = -lbpf
 
-# Target executable
-TARGET = lsport
+all: vmlinux.h netmon
 
-# Source files
-SRCS = src/lsport.c
+vmlinux.h:
+	bpftool btf dump file /sys/kernel/btf/vmlinux format c > vmlinux.h
 
-# Object files
-OBJS = $(SRCS:.c=.o)
+netmon.bpf.o: netmon.bpf.c vmlinux.h
+	$(BPF_CLANG) $(BPF_CFLAGS) -c $< -o $@
 
-# Default rule to build the executable
-all: $(TARGET)
+netmon.skel.h: netmon.bpf.o
+	bpftool gen skeleton $< > $@
 
-# Compile source files into object files
-%.o: %.c
-	$(CC) $(CFLAGS) -c $< -o $@
+netmon: netmon.c netmon.skel.h
+	$(CC) -g -O2 -o $@ netmon.c $(LIBBPF_OBJ) -lelf -lz
 
-# Link object files into the final executable
-$(TARGET): $(OBJS)
-	$(CC) $(CFLAGS) $(OBJS) -o $(TARGET)
+test: netmon
+	sudo strace ./netmon
 
-# Clean up generated files
 clean:
-	rm -f $(OBJS) $(TARGET)
-
-# Display help message
-help:
-	@echo "Makefile for lsport"
-	@echo "Targets:"
-	@echo "  all     - Build the lsport executable"
-	@echo "  clean   - Remove compiled files"
-	@echo "  help    - Display this help message"
+	rm -f netmon netmon.bpf.o netmon.skel.h vmlinux.h
 
